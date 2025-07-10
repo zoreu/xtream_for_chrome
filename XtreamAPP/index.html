@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Xtream Codes Panel</title>
+    <link rel="stylesheet" href="styles/styles.css">
+</head>
+<body>
+    <div class="login-container">
+        <h2>Login Xtream Codes</h2>
+        <input type="text" id="host" placeholder="Host (ex: http://example.com:8080)" required>
+        <input type="text" id="username" placeholder="Usuário" required>
+        <input type="password" id="password" placeholder="Senha" required>
+        <label>
+            <input type="checkbox" id="keepLoggedIn"> Manter logado
+        </label>
+        <button id="loginButton">Entrar</button> <!-- Removed onclick, added id -->
+    </div>
+    <script src="scripts/login.js"></script>
+</body>
+</html>

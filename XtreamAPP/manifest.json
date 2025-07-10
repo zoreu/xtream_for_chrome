@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Xtream Codes Panel",
+  "version": "1.0",
+  "description": "Extensão para acessar o painel Xtream Codes diretamente no Chrome.",
+  "permissions": [
+    "storage",
+    "cookies",
+    "webRequest",
+    "webRequestAuthProvider",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_icon": {
+      "16": "images/icon.png",
+      "48": "images/icon.png",
+      "128": "images/icon.png"
+    }
+  },
+  "icons": {
+    "16": "images/icon.png",
+    "48": "images/icon.png",
+    "128": "images/icon.png"
+  },
+  "background": {
+    "service_worker": "scripts/background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src *;"
+  }
+}
