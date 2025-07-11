@@ -460,8 +460,8 @@ function fetchEPG(streamId) {
         });
 }
 
-function globalSearch(query) {
-    query = query || document.getElementById('search').value.toLowerCase();
+function globalSearch() {
+    const query = document.getElementById('search').value.toLowerCase();
     console.log('Pesquisando:', query);
     if (!query) {
         loadSection(currentSection);
@@ -475,6 +475,14 @@ function globalSearch(query) {
     }
     document.getElementById('backButton').style.display = 'inline-block';
 
+    // Hide other views and clear content-grid
+    const contentGrid = document.getElementById('content-grid');
+    document.getElementById('video-player').style.display = 'none';
+    document.getElementById('epg').style.display = 'none';
+    document.getElementById('series-selector').style.display = 'none';
+    contentGrid.style.display = 'none';
+    contentGrid.innerHTML = '';
+
     const liveUrl = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=get_live_streams`;
     fetch(liveUrl)
         .then(response => {
@@ -485,6 +493,15 @@ function globalSearch(query) {
             return response.json();
         })
         .then(live => {
+            console.log('Live streams recebidos:', live);
+            const liveResults = Array.isArray(live) ? live.filter(item => {
+                const name = item.name || '';
+                const matches = name.toLowerCase().includes(query);
+                console.log(`Filtrando live item: ${name}, matches: ${matches}`);
+                return matches;
+            }).map(item => ({ section: 'live', ...item })) : [];
+            console.log('Live results:', liveResults);
+
             const vodUrl = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=get_vod_streams`;
             fetch(vodUrl)
                 .then(response => {
@@ -495,6 +512,15 @@ function globalSearch(query) {
                     return response.json();
                 })
                 .then(vod => {
+                    console.log('VOD streams recebidos:', vod);
+                    const vodResults = Array.isArray(vod) ? vod.filter(item => {
+                        const name = item.name || '';
+                        const matches = name.toLowerCase().includes(query);
+                        console.log(`Filtrando VOD item: ${name}, matches: ${matches}`);
+                        return matches;
+                    }).map(item => ({ section: 'movies', ...item })) : [];
+                    console.log('VOD results:', vodResults);
+
                     const seriesUrl = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=get_series`;
                     fetch(seriesUrl)
                         .then(response => {
@@ -505,24 +531,34 @@ function globalSearch(query) {
                             return response.json();
                         })
                         .then(series => {
-                            console.log('Resultados da busca:', { live, vod, series });
-                            const results = [
-                                ...live.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'live', ...item })),
-                                ...vod.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'movies', ...item })),
-                                ...series.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'series', ...item }))
-                            ];
-                            const contentGrid = document.getElementById('content-grid');
+                            console.log('Séries recebidas:', series);
+                            const seriesResults = Array.isArray(series) ? series.filter(item => {
+                                const name = item.name || '';
+                                const matches = name.toLowerCase().includes(query);
+                                console.log(`Filtrando série item: ${name}, matches: ${matches}`);
+                                return matches;
+                            }).map(item => ({ section: 'series', ...item })) : [];
+                            console.log('Series results:', seriesResults);
+
+                            const results = [...liveResults, ...vodResults, ...seriesResults];
+                            console.log('Resultados finais da busca:', results);
+
                             contentGrid.innerHTML = results.length > 0 ? results.map(item => {
                                 const imageSrc = item.section === 'series' ? (item.cover || 'https://via.placeholder.com/150') : (item.stream_icon || 'https://via.placeholder.com/150');
+                                const itemName = item.name || 'Sem título';
+                                const itemId = item.stream_id || item.series_id || '';
                                 return `
-                                    <div class="content-item" data-section="${item.section}" data-stream-id="${item.stream_id || item.series_id}" data-name="${item.name}" data-icon="${imageSrc}">
-                                        <img src="${imageSrc}" alt="${item.name}">
-                                        <p class="title">${item.name}</p>
+                                    <div class="content-item" data-section="${item.section}" data-stream-id="${itemId}" data-name="${itemName}" data-icon="${imageSrc}">
+                                        <img src="${imageSrc}" alt="${itemName}">
+                                        <p class="title">${itemName}</p>
                                     </div>
                                 `;
                             }).join('') : '<p>Nenhum resultado encontrado.</p>';
                             contentGrid.style.display = 'grid';
                             console.log('Content-grid atualizado (busca):', contentGrid.innerHTML);
+
+                            // Trigger reflow to ensure DOM update
+                            contentGrid.offsetHeight;
 
                             const contentItems = contentGrid.querySelectorAll('.content-item');
                             console.log(`Anexando listeners para ${contentItems.length} itens de conteúdo (busca)`);
@@ -530,22 +566,25 @@ function globalSearch(query) {
                                 item.removeEventListener('click', handleContentItemClick);
                                 item.addEventListener('click', handleContentItemClick);
                             });
-                            document.getElementById('video-player').style.display = 'none';
-                            document.getElementById('epg').style.display = 'none';
-                            document.getElementById('series-selector').style.display = 'none';
                         })
                         .catch(error => {
                             console.error('Erro ao carregar séries:', error);
+                            contentGrid.innerHTML = '<p>Erro ao carregar resultados da busca.</p>';
+                            contentGrid.style.display = 'grid';
                             alert('Erro ao carregar séries: ' + error.message);
                         });
                 })
                 .catch(error => {
                     console.error('Erro ao carregar VOD:', error);
+                    contentGrid.innerHTML = '<p>Erro ao carregar resultados da busca.</p>';
+                    contentGrid.style.display = 'grid';
                     alert('Erro ao carregar VOD: ' + error.message);
                 });
         })
         .catch(error => {
             console.error('Erro ao carregar live streams:', error);
+            contentGrid.innerHTML = '<p>Erro ao carregar resultados da busca.</p>';
+            contentGrid.style.display = 'grid';
             alert('Erro ao carregar live streams: ' + error.message);
         });
 }
