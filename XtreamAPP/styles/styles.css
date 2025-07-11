@@ -148,6 +148,16 @@ body {
     background-color: #0056b3;
 }
 
+#backButton {
+    background-color: #6c757d; /* Gray to distinguish from other buttons */
+    color: #fff;
+    border: none;
+}
+
+#backButton:hover {
+    background-color: #5a6268;
+}
+
 #content-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

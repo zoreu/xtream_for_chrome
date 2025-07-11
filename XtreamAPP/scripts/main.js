@@ -4,6 +4,7 @@ let currentSection = 'live';
 let credentials = {};
 let seriesInfo = {};
 let currentSeriesId = null;
+let historyStack = [];
 
 chrome.storage.local.get(['host', 'username', 'password'], (result) => {
     credentials = {
@@ -31,6 +32,7 @@ function attachEventListeners() {
     const accountButton = document.getElementById('accountButton');
     const logoutButton = document.getElementById('logoutButton');
     const playEpisodeButton = document.getElementById('playEpisodeButton');
+    const backButton = document.getElementById('backButton');
     
     if (sectionSelect) {
         sectionSelect.addEventListener('change', () => loadSection(sectionSelect.value));
@@ -67,6 +69,13 @@ function attachEventListeners() {
         console.error('playEpisodeButton não encontrado.');
     }
     
+    if (backButton) {
+        backButton.addEventListener('click', goBack);
+        console.log('Event listener anexado ao backButton.');
+    } else {
+        console.error('backButton não encontrado.');
+    }
+    
     const seasonSelect = document.getElementById('season-select');
     if (seasonSelect) {
         seasonSelect.addEventListener('change', updateEpisodes);
@@ -79,6 +88,7 @@ function attachEventListeners() {
 function logout() {
     console.log('Fazendo logout, removendo credenciais do storage.');
     chrome.storage.local.remove(['host', 'username', 'password'], () => {
+        historyStack = [];
         window.location.href = chrome.runtime.getURL('index.html');
         window.location.hash = '';
     });
@@ -90,7 +100,12 @@ function loadSection(section) {
     document.getElementById('epg').style.display = 'none';
     document.getElementById('series-selector').style.display = 'none';
     document.getElementById('content-grid').style.display = 'grid';
+    document.getElementById('backButton').style.display = 'none';
     console.log('Carregando seção:', section);
+    
+    historyStack = [{ type: 'section', section }];
+    console.log('Histórico atualizado:', historyStack);
+    
     fetchCategories(section);
 }
 
@@ -119,17 +134,14 @@ function fetchCategories(section) {
         .then(categories => {
             const sidebar = document.getElementById('categories');
             sidebar.innerHTML = '<ul>' + categories.map(cat => `<li data-section="${section}" data-category-id="${cat.category_id}" data-category-name="${cat.category_name}">${cat.category_name}</li>`).join('') + '</ul>';
-            const categoryItems = sidebar.querySelectorAll('li');
-            categoryItems.forEach(item => {
-                item.addEventListener('click', () => {
-                    const section = item.dataset.section;
-                    const categoryId = item.dataset.categoryId;
-                    const categoryName = item.dataset.categoryName;
-                    loadCategory(section, categoryId, categoryName);
-                });
-            });
+            attachCategoryListeners(section);
             if (categories.length > 0) {
                 loadCategory(section, categories[0].category_id, categories[0].category_name);
+            } else {
+                console.log('Nenhuma categoria disponível, limpando content-grid');
+                const contentGrid = document.getElementById('content-grid');
+                contentGrid.innerHTML = '<p>Nenhuma categoria disponível.</p>';
+                contentGrid.style.display = 'grid';
             }
         })
         .catch(error => {
@@ -138,11 +150,44 @@ function fetchCategories(section) {
         });
 }
 
+function attachCategoryListeners(section) {
+    const categoryItems = document.querySelectorAll('#categories li');
+    console.log(`Anexando listeners para ${categoryItems.length} itens de categoria na seção ${section}`);
+    categoryItems.forEach(item => {
+        item.removeEventListener('click', handleCategoryClick);
+        item.addEventListener('click', handleCategoryClick);
+    });
+}
+
+function handleCategoryClick(event) {
+    const item = event.currentTarget;
+    const section = item.dataset.section;
+    const categoryId = item.dataset.categoryId;
+    const categoryName = item.dataset.categoryName;
+    console.log('Categoria clicada:', { section, categoryId, categoryName });
+    loadCategory(section, categoryId, categoryName);
+}
+
 function loadCategory(section, categoryId, categoryName) {
     const action = section === 'live' ? 'get_live_streams' :
                   section === 'movies' ? 'get_vod_streams' : 'get_series';
     const url = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=${action}&category_id=${categoryId}`;
     console.log('Buscando itens da categoria:', { section, categoryId, categoryName, url });
+
+    if (historyStack.length === 0 || historyStack[historyStack.length - 1].type !== 'category' ||
+        historyStack[historyStack.length - 1].categoryId !== categoryId) {
+        historyStack.push({ type: 'category', section, categoryId, categoryName });
+        console.log('Histórico atualizado:', historyStack);
+    }
+
+    // Ensure other views are hidden
+    document.getElementById('video-player').style.display = 'none';
+    document.getElementById('epg').style.display = 'none';
+    document.getElementById('series-selector').style.display = 'none';
+    const contentGrid = document.getElementById('content-grid');
+    contentGrid.style.display = 'none'; // Hide initially to avoid flicker
+    contentGrid.innerHTML = ''; // Clear previous content
+    document.getElementById('backButton').style.display = 'inline-block';
 
     fetch(url)
         .then(response => {
@@ -153,9 +198,8 @@ function loadCategory(section, categoryId, categoryName) {
             return response.json();
         })
         .then(items => {
-            console.log('Itens recebidos:', items); // Log to verify structure
-            const contentGrid = document.getElementById('content-grid');
-            contentGrid.innerHTML = items.map(item => {
+            console.log('Itens recebidos:', items);
+            contentGrid.innerHTML = items.length > 0 ? items.map(item => {
                 const imageSrc = section === 'series' ? (item.cover || 'https://via.placeholder.com/150') : (item.stream_icon || 'https://via.placeholder.com/150');
                 return `
                     <div class="content-item" data-section="${section}" data-stream-id="${item.stream_id || item.series_id}" data-name="${item.name}" data-icon="${imageSrc}">
@@ -163,22 +207,36 @@ function loadCategory(section, categoryId, categoryName) {
                         <p class="title">${item.name}</p>
                     </div>
                 `;
-            }).join('');
+            }).join('') : '<p>Nenhum item disponível.</p>';
+            contentGrid.style.display = 'grid'; // Show after updating
+            console.log('Content-grid atualizado:', contentGrid.innerHTML);
+
+            // Trigger reflow to ensure DOM update
+            contentGrid.offsetHeight;
+
             const contentItems = contentGrid.querySelectorAll('.content-item');
+            console.log(`Anexando listeners para ${contentItems.length} itens de conteúdo`);
             contentItems.forEach(item => {
-                item.addEventListener('click', () => {
-                    const section = item.dataset.section;
-                    const streamId = item.dataset.streamId;
-                    const name = item.dataset.name;
-                    const icon = item.dataset.icon;
-                    playStream(section, streamId, name, icon);
-                });
+                item.removeEventListener('click', handleContentItemClick);
+                item.addEventListener('click', handleContentItemClick);
             });
         })
         .catch(error => {
             console.error('Erro ao carregar itens:', error);
+            contentGrid.innerHTML = '<p>Erro ao carregar itens.</p>';
+            contentGrid.style.display = 'grid';
             alert('Erro ao carregar itens: ' + error.message);
         });
+}
+
+function handleContentItemClick(event) {
+    const item = event.currentTarget;
+    const section = item.dataset.section;
+    const streamId = item.dataset.streamId;
+    const name = item.dataset.name;
+    const icon = item.dataset.icon;
+    console.log('Item de conteúdo clicado:', { section, streamId, name });
+    playStream(section, streamId, name, icon);
 }
 
 function playStream(section, streamId, name, icon) {
@@ -190,11 +248,17 @@ function playStream(section, streamId, name, icon) {
     const seriesSelector = document.getElementById('series-selector');
     playerDiv.style.display = 'block';
     videoTitle.textContent = name;
-    videoInfo.innerHTML = ''; // Clear previous info
+    videoInfo.innerHTML = '';
     videoInfo.style.display = 'none';
+    document.getElementById('backButton').style.display = 'inline-block';
+
+    if (historyStack.length === 0 || historyStack[historyStack.length - 1].type !== 'stream' ||
+        historyStack[historyStack.length - 1].streamId !== streamId) {
+        historyStack.push({ type: 'stream', section, streamId, name, icon });
+        console.log('Histórico atualizado:', historyStack);
+    }
 
     if (section === 'movies') {
-        // Fetch movie info
         const url = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=get_vod_info&vod_id=${streamId}`;
         console.log('Buscando informações do filme:', url);
         fetch(url)
@@ -206,7 +270,7 @@ function playStream(section, streamId, name, icon) {
                 return response.json();
             })
             .then(data => {
-                console.log('Informações do filme:', data); // Log to verify info.genre and info.plot
+                console.log('Informações do filme:', data);
                 const genre = data.info && data.info.genre ? data.info.genre : 'N/A';
                 const synopsis = data.info && data.info.plot ? data.info.plot : 'Sem descrição';
                 videoInfo.innerHTML = `
@@ -222,7 +286,7 @@ function playStream(section, streamId, name, icon) {
             });
     } else if (section === 'series') {
         currentSeriesId = streamId;
-        fetchSeriesInfo(streamId); // Will update videoInfo
+        fetchSeriesInfo(streamId);
         seriesSelector.style.display = 'block';
     } else {
         videoInfo.style.display = 'none';
@@ -279,8 +343,7 @@ function fetchSeriesInfo(seriesId) {
             }
             updateEpisodes();
 
-            // Update video-info with series genre and synopsis
-            console.log('Informações da série:', data); // Log to verify info.genre and info.plot
+            console.log('Informações da série:', data);
             const videoInfo = document.getElementById('video-info');
             const genre = data.info && data.info.genre ? data.info.genre : 'N/A';
             const synopsis = data.info && data.info.plot ? data.info.plot : 'Sem descrição';
@@ -397,13 +460,21 @@ function fetchEPG(streamId) {
         });
 }
 
-function globalSearch() {
-    const query = document.getElementById('search').value.toLowerCase();
+function globalSearch(query) {
+    query = query || document.getElementById('search').value.toLowerCase();
     console.log('Pesquisando:', query);
     if (!query) {
         loadSection(currentSection);
         return;
     }
+    
+    if (historyStack.length === 0 || historyStack[historyStack.length - 1].type !== 'search' ||
+        historyStack[historyStack.length - 1].query !== query) {
+        historyStack.push({ type: 'search', query });
+        console.log('Histórico atualizado:', historyStack);
+    }
+    document.getElementById('backButton').style.display = 'inline-block';
+
     const liveUrl = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=get_live_streams`;
     fetch(liveUrl)
         .then(response => {
@@ -434,14 +505,14 @@ function globalSearch() {
                             return response.json();
                         })
                         .then(series => {
-                            console.log('Resultados da busca:', { live, vod, series }); // Log to verify structure
+                            console.log('Resultados da busca:', { live, vod, series });
                             const results = [
                                 ...live.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'live', ...item })),
                                 ...vod.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'movies', ...item })),
                                 ...series.filter(item => item.name.toLowerCase().includes(query)).map(item => ({ section: 'series', ...item }))
                             ];
                             const contentGrid = document.getElementById('content-grid');
-                            contentGrid.innerHTML = results.map(item => {
+                            contentGrid.innerHTML = results.length > 0 ? results.map(item => {
                                 const imageSrc = item.section === 'series' ? (item.cover || 'https://via.placeholder.com/150') : (item.stream_icon || 'https://via.placeholder.com/150');
                                 return `
                                     <div class="content-item" data-section="${item.section}" data-stream-id="${item.stream_id || item.series_id}" data-name="${item.name}" data-icon="${imageSrc}">
@@ -449,21 +520,19 @@ function globalSearch() {
                                         <p class="title">${item.name}</p>
                                     </div>
                                 `;
-                            }).join('');
+                            }).join('') : '<p>Nenhum resultado encontrado.</p>';
+                            contentGrid.style.display = 'grid';
+                            console.log('Content-grid atualizado (busca):', contentGrid.innerHTML);
+
                             const contentItems = contentGrid.querySelectorAll('.content-item');
+                            console.log(`Anexando listeners para ${contentItems.length} itens de conteúdo (busca)`);
                             contentItems.forEach(item => {
-                                item.addEventListener('click', () => {
-                                    const section = item.dataset.section;
-                                    const streamId = item.dataset.streamId;
-                                    const name = item.dataset.name;
-                                    const icon = item.dataset.icon;
-                                    playStream(section, streamId, name, icon);
-                                });
+                                item.removeEventListener('click', handleContentItemClick);
+                                item.addEventListener('click', handleContentItemClick);
                             });
                             document.getElementById('video-player').style.display = 'none';
                             document.getElementById('epg').style.display = 'none';
                             document.getElementById('series-selector').style.display = 'none';
-                            document.getElementById('content-grid').style.display = 'grid';
                         })
                         .catch(error => {
                             console.error('Erro ao carregar séries:', error);
@@ -517,4 +586,41 @@ function showAccountInfo() {
             console.error('Erro ao carregar informações da conta:', error);
             alert('Erro ao carregar informações da conta: ' + error.message);
         });
+}
+
+function goBack() {
+    console.log('Histórico antes de voltar:', historyStack);
+    if (historyStack.length <= 1) {
+        console.log('Nenhum estado anterior no histórico.');
+        document.getElementById('backButton').style.display = 'none';
+        return;
+    }
+
+    // Pop the current state
+    historyStack.pop();
+    const previousState = historyStack[historyStack.length - 1];
+    console.log('Voltando para estado anterior:', previousState);
+
+    // Reset player and clear current view
+    const player = videojs('player');
+    player.pause();
+    player.src([]);
+    document.getElementById('video-player').style.display = 'none';
+    document.getElementById('epg').style.display = 'none';
+    document.getElementById('series-selector').style.display = 'none';
+    document.getElementById('content-grid').style.display = 'none';
+
+    // Restore previous state
+    if (previousState.type === 'section') {
+        loadSection(previousState.section);
+    } else if (previousState.type === 'category') {
+        loadCategory(previousState.section, previousState.categoryId, previousState.categoryName);
+    } else if (previousState.type === 'stream') {
+        playStream(previousState.section, previousState.streamId, previousState.name, previousState.icon);
+    } else if (previousState.type === 'search') {
+        globalSearch(previousState.query);
+    }
+
+    // Re-attach category listeners
+    attachCategoryListeners(previousState.section || currentSection);
 }
