@@ -25,7 +25,7 @@ function login() {
     const host = document.getElementById('host').value.trim();
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
-    const keepLoggedIn = document.getElementById('keepLoggedIn').checked;
+    // const keepLoggedIn = document.getElementById('keepLoggedIn').checked;
 
     if (!host || !username || !password) {
         alert('Por favor, preencha todos os campos.');

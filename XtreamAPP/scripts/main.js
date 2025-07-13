@@ -6,13 +6,18 @@ let seriesInfo = {};
 let currentSeriesId = null;
 let historyStack = [];
 
-chrome.storage.local.get(['host', 'username', 'password'], (result) => {
+chrome.storage.local.get(['host', 'username', 'password', 'theme'], (result) => {
     credentials = {
         host: result.host,
         username: result.username,
         password: result.password
     };
     console.log('Credenciais carregadas:', credentials);
+    
+    // Load saved theme or default to light
+    const savedTheme = result.theme || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    console.log('Tema carregado:', savedTheme);
     
     if (!credentials.host || !credentials.username || !credentials.password) {
         console.log('Nenhuma credencial encontrada, redirecionando para index.html');
@@ -33,6 +38,7 @@ function attachEventListeners() {
     const logoutButton = document.getElementById('logoutButton');
     const playEpisodeButton = document.getElementById('playEpisodeButton');
     const backButton = document.getElementById('backButton');
+    const themeToggle = document.getElementById('themeToggle');
     
     if (sectionSelect) {
         sectionSelect.addEventListener('change', () => loadSection(sectionSelect.value));
@@ -76,6 +82,13 @@ function attachEventListeners() {
         console.error('backButton não encontrado.');
     }
     
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+        console.log('Event listener anexado ao themeToggle.');
+    } else {
+        console.error('themeToggle não encontrado.');
+    }
+    
     const seasonSelect = document.getElementById('season-select');
     if (seasonSelect) {
         seasonSelect.addEventListener('change', updateEpisodes);
@@ -83,6 +96,15 @@ function attachEventListeners() {
     } else {
         console.error('season-select não encontrado.');
     }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    chrome.storage.local.set({ theme: newTheme }, () => {
+        console.log('Tema salvo:', newTheme);
+    });
 }
 
 function logout() {
@@ -119,7 +141,7 @@ function fetchCategories(section) {
     }
 
     const action = section === 'live' ? 'get_live_categories' :
-                  section === 'movies' ? 'get_vod_categories' : 'get_series_categories';
+        section === 'movies' ? 'get_vod_categories' : 'get_series_categories';
     const url = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=${action}`;
     console.log('Buscando categorias:', { section, action, url });
 
@@ -170,7 +192,7 @@ function handleCategoryClick(event) {
 
 function loadCategory(section, categoryId, categoryName) {
     const action = section === 'live' ? 'get_live_streams' :
-                  section === 'movies' ? 'get_vod_streams' : 'get_series';
+        section === 'movies' ? 'get_vod_streams' : 'get_series';
     const url = `${credentials.host}/player_api.php?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}&action=${action}&category_id=${categoryId}`;
     console.log('Buscando itens da categoria:', { section, categoryId, categoryName, url });
 
@@ -200,7 +222,7 @@ function loadCategory(section, categoryId, categoryName) {
         .then(items => {
             console.log('Itens recebidos:', items);
             contentGrid.innerHTML = items.length > 0 ? items.map(item => {
-                const imageSrc = section === 'series' ? (item.cover || 'https://via.placeholder.com/150') : (item.stream_icon || 'https://via.placeholder.com/150');
+                const imageSrc = section === 'series' ? (item.cover || 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg') : (item.stream_icon || 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg');
                 return `
                     <div class="content-item" data-section="${section}" data-stream-id="${item.stream_id || item.series_id}" data-name="${item.name}" data-icon="${imageSrc}">
                         <img src="${imageSrc}" alt="${item.name}">
@@ -302,7 +324,7 @@ function playStream(section, streamId, name, icon) {
                 src: streamUrl,
                 type: 'video/mp4'
             });
-        } else {           
+        } else { 
             player.src({
                 src: streamUrl,
                 type: 'application/x-mpegURL'
@@ -394,12 +416,12 @@ function playEpisode() {
                     src: streamUrl,
                     type: 'video/mp4'
                 });
-            } else {           
+            } else { 
                 player.src({
                     src: streamUrl,
                     type: 'application/x-mpegURL'
                 });
-            }            
+            } 
             player.play();
         }
     }
@@ -544,7 +566,7 @@ function globalSearch() {
                             console.log('Resultados finais da busca:', results);
 
                             contentGrid.innerHTML = results.length > 0 ? results.map(item => {
-                                const imageSrc = item.section === 'series' ? (item.cover || 'https://via.placeholder.com/150') : (item.stream_icon || 'https://via.placeholder.com/150');
+                                const imageSrc = item.section === 'series' ? (item.cover || 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg') : (item.stream_icon || 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg');
                                 const itemName = item.name || 'Sem título';
                                 const itemId = item.stream_id || item.series_id || '';
                                 return `
@@ -611,7 +633,9 @@ function showAccountInfo() {
                     <p><strong>Usuário:</strong> ${userInfo.username}</p>
                     <p><strong>Senha:</strong> ${userInfo.password}</p>
                     <p><strong>Data de Criação:</strong> ${new Date(userInfo.created_at * 1000).toLocaleDateString()}</p>
-                    <p><strong>Expiração:</strong> ${new Date(userInfo.exp_date * 1000).toLocaleDateString()}</p>
+                    <p><strong>Expiração:</strong> ${userInfo.exp_date ? new Date(userInfo.exp_date * 1000).toLocaleDateString() : 'Nunca expira'}</p>
+                    <p><strong>Conexões Máximas:</strong> ${userInfo.max_connections || 'Ilimitado'}</p>
+                    <p><strong>Conexões Atuais:</strong> ${userInfo.active_cons || '0'}</p>
                 </div>
             `;
             document.body.appendChild(modal);

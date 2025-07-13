@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Xtream Codes Panel</title>
-    <link rel="stylesheet" href="styles/styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Xtream Codes</title>
+  <link href="styles/styles.css" rel="stylesheet">
+  <script>
+    // Apply saved theme on login page
+    chrome.storage.local.get(['theme'], (result) => {
+      const savedTheme = result.theme || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      console.log('Tema carregado (index.html):', savedTheme);
+    });
+  </script>
 </head>
 <body>
     <div class="login-container">
@@ -12,9 +20,6 @@
         <input type="text" id="host" placeholder="Host (ex: http://example.com:8080)" required>
         <input type="text" id="username" placeholder="Usuário" required>
         <input type="password" id="password" placeholder="Senha" required>
-        <label>
-            <input type="checkbox" id="keepLoggedIn"> Manter logado
-        </label>
         <button id="loginButton">Entrar</button> <!-- Removed onclick, added id -->
     </div>
     <script src="scripts/login.js"></script>
