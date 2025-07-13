@@ -5,14 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Xtream Codes</title>
   <link href="styles/styles.css" rel="stylesheet">
-  <script>
-    // Apply saved theme on login page
-    chrome.storage.local.get(['theme'], (result) => {
-      const savedTheme = result.theme || 'light';
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      console.log('Tema carregado (index.html):', savedTheme);
-    });
-  </script>
+  <script src="scripts/theme.js"></script>
 </head>
 <body>
     <div class="login-container">
